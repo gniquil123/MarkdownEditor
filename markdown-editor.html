@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MD Editor - Markdown 编辑器</title>
+    <link rel="stylesheet" href="md-editor-assets/atom-one-dark.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-tertiary: #0f3460;
+            --bg-code: #0d1117;
+            --text-primary: #eaeaea;
+            --text-secondary: #a0a0a0;
+            --accent: #e94560;
+            --accent-hover: #ff6b6b;
+            --border: #2a2a4a;
+            --success: #4ecca3;
+            --warning: #ffc107;
+        }
+
+        html, body {
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            overflow: hidden;
+        }
+
+        .app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* 顶部工具栏 */
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            padding: 10px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            align-items: center;
+        }
+
+        .toolbar-group {
+            display: flex;
+            gap: 4px;
+            padding-right: 8px;
+            border-right: 1px solid var(--border);
+        }
+
+        .toolbar-group:last-child {
+            border-right: none;
+            margin-left: auto;
+        }
+
+        .btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 40px;
+            height: 40px;
+            padding: 0 12px;
+            border: none;
+            border-radius: 8px;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            touch-action: manipulation;
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+        }
+
+        .btn:hover:not(:disabled) {
+            background: var(--accent);
+        }
+
+        .btn.active {
+            background: var(--accent);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn svg {
+            width: 20px;
+            height: 20px;
+            fill: currentColor;
+        }
+
+        .btn-text {
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+        }
+
+        /* 主内容区 */
+        .main-content {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* 编辑器 */
+        .editor-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .editor {
+            flex: 1;
+            width: 100%;
+            padding: 16px;
+            border: none;
+            outline: none;
+            resize: none;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+            font-size: 15px;
+            line-height: 1.8;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            tab-size: 4;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        /* 预览区 */
+        .preview-container {
+            flex: 1;
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+            background: var(--bg-primary);
+        }
+
+        .preview {
+            flex: 1;
+            padding: 16px;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            font-size: 15px;
+            line-height: 1.8;
+        }
+
+        .preview-container.active {
+            display: flex;
+        }
+
+        .editor-container.hidden {
+            display: none;
+        }
+
+        /* Markdown 预览样式 */
+        .preview h1, .preview h2, .preview h3,
+        .preview h4, .preview h5, .preview h6 {
+            margin: 24px 0 16px 0;
+            font-weight: 600;
+            line-height: 1.4;
+            color: var(--text-primary);
+        }
+
+        .preview h1 { font-size: 28px; border-bottom: 2px solid var(--border); padding-bottom: 8px; }
+        .preview h2 { font-size: 24px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+        .preview h3 { font-size: 20px; }
+        .preview h4 { font-size: 18px; }
+        .preview h5 { font-size: 16px; }
+        .preview h6 { font-size: 14px; color: var(--text-secondary); }
+
+        .preview p {
+            margin: 12px 0;
+        }
+
+        .preview a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        .preview a:hover {
+            text-decoration: underline;
+        }
+
+        .preview strong {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .preview em {
+            color: var(--text-secondary);
+        }
+
+        .preview del {
+            color: var(--text-secondary);
+            text-decoration: line-through;
+        }
+
+        .preview code {
+            padding: 2px 6px;
+            background: var(--bg-code);
+            border-radius: 4px;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+            font-size: 13px;
+            color: #ff7b72;
+        }
+
+        .preview pre {
+            margin: 16px 0;
+            padding: 16px;
+            background: var(--bg-code);
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+
+        .preview pre code {
+            padding: 0;
+            background: none;
+            color: inherit;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .preview blockquote {
+            margin: 16px 0;
+            padding: 12px 16px;
+            border-left: 4px solid var(--accent);
+            background: var(--bg-secondary);
+            border-radius: 0 8px 8px 0;
+        }
+
+        .preview blockquote p {
+            margin: 0;
+        }
+
+        .preview ul, .preview ol {
+            margin: 12px 0;
+            padding-left: 24px;
+        }
+
+        .preview li {
+            margin: 6px 0;
+        }
+
+        .preview hr {
+            margin: 24px 0;
+            border: none;
+            height: 2px;
+            background: var(--border);
+        }
+
+        .preview table {
+            width: 100%;
+            margin: 16px 0;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        .preview th, .preview td {
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            text-align: left;
+        }
+
+        .preview th {
+            background: var(--bg-secondary);
+            font-weight: 600;
+        }
+
+        .preview tr:nth-child(even) {
+            background: rgba(255,255,255,0.02);
+        }
+
+        .preview img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            margin: 12px 0;
+        }
+
+        /* 任务列表 */
+        .preview .task-list-item {
+            list-style-type: none;
+            margin-left: -20px;
+        }
+
+        .preview .task-list-item input {
+            margin-right: 8px;
+        }
+
+        /* 底部状态栏 */
+        .statusbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 16px;
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border);
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .statusbar-left, .statusbar-right {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+
+        /* 隐藏的文件输入 */
+        #fileInput {
+            display: none;
+        }
+
+        /* Toast 提示 */
+        .toast {
+            position: fixed;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+            opacity: 0;
+            transition: all 0.3s;
+            z-index: 2000;
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        /* 横屏分屏模式 */
+        @media screen and (orientation: landscape) and (min-width: 768px) {
+            .main-content.split-mode .editor-container {
+                width: 50%;
+                border-right: 1px solid var(--border);
+            }
+
+            .main-content.split-mode .preview-container {
+                display: flex !important;
+                width: 50%;
+            }
+
+            .split-indicator {
+                display: none;
+            }
+        }
+
+        /* 滚动条样式 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--accent);
+        }
+
+        /* 选中文字样式 */
+        ::selection {
+            background: var(--accent);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <!-- 工具栏 -->
+        <div class="toolbar">
+            <div class="toolbar-group">
+                <button class="btn" id="undoBtn" onclick="undo()" title="撤销 (Ctrl+Z)" disabled>
+                    <svg viewBox="0 0 24 24"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>
+                </button>
+                <button class="btn" id="redoBtn" onclick="redo()" title="恢复 (Ctrl+Y)" disabled>
+                    <svg viewBox="0 0 24 24"><path d="M18.4 10.6C16.55 8.99 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22L3.9 16c1.05-3.19 4.05-5.5 7.6-5.5 1.95 0 3.73.72 5.12 1.88L13 16h9V7l-3.6 3.6z"/></svg>
+                </button>
+            </div>
+            <div class="toolbar-group">
+                <button class="btn" onclick="insertMarkdown('**', '**')" title="加粗">
+                    <svg viewBox="0 0 24 24"><path d="M15.6 10.79c.97-.67 1.65-1.77 1.65-2.79 0-2.26-1.75-4-4-4H7v14h7.04c2.09 0 3.71-1.7 3.71-3.79 0-1.52-.86-2.82-2.15-3.42zM10 6.5h3c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-3v-3zm3.5 9H10v-3h3.5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5z"/></svg>
+                </button>
+                <button class="btn" onclick="insertMarkdown('*', '*')" title="斜体">
+                    <svg viewBox="0 0 24 24"><path d="M10 4v3h2.21l-3.42 8H6v3h8v-3h-2.21l3.42-8H18V4z"/></svg>
+                </button>
+                <button class="btn" onclick="insertMarkdown('~~', '~~')" title="删除线">
+                    <svg viewBox="0 0 24 24"><path d="M6 9h12v2H6zM6 19h4v-3h4v3h4v-5H6zM11 4h2v5h-2z"/></svg>
+                </button>
+            </div>
+            <div class="toolbar-group">
+                <button class="btn" onclick="insertMarkdown('# ', '')" title="标题 H1">
+                    <svg viewBox="0 0 24 24"><path d="M5 4v3h5.5v12h3V7H19V4z"/></svg>
+                </button>
+                <button class="btn" onclick="insertMarkdown('## ', '')" title="标题 H2">
+                    <svg viewBox="0 0 24 24"><path d="M5 4v3h5.5v12h3V7H19V4h-5zM21 18h-2v-3h-2v3h-2v-3h-2v3H9v-3H7v3H5v-3H3v3H1v2h2v3h2v-3h2v3h2v-3h2v3h2v-3h2v3h2v-3h2z"/></svg>
+                </button>
+            </div>
+            <div class="toolbar-group">
+                <button class="btn" onclick="insertMarkdown('- ', '')" title="无序列表">
+                    <svg viewBox="0 0 24 24"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4zM2 6h2v2H2zm0 5h2v2H2zm0 5h2v2H2z"/></svg>
+                </button>
+                <button class="btn" onclick="insertMarkdown('1. ', '')" title="有序列表">
+                    <svg viewBox="0 0 24 24"><path d="M7 13h11v-2H7v2zM7 19h11v-2H7v2zM7 7h11V5H7v2zM2 5h2v6H3V6H2V5zm0 8.5c0-.83.67-1.5 1.5-1.5H5v2H4v1h1.5c.83 0 1.5.67 1.5 1.5V17c0 .83-.67 1.5-1.5 1.5H2v-2h2v-1H2.5c-.83 0-1.5-.67-1.5-1.5v-1zM5 19H3v-2h2v2z"/></svg>
+                </button>
+                <button class="btn" onclick="insertMarkdown('> ', '')" title="引用">
+                    <svg viewBox="0 0 24 24"><path d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z"/></svg>
+                </button>
+            </div>
+            <div class="toolbar-group">
+                <button class="btn" onclick="insertMarkdown('```\n', '\n```')" title="代码块">
+                    <svg viewBox="0 0 24 24"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>
+                </button>
+                <button class="btn" onclick="insertMarkdown('`', '`')" title="行内代码">
+                    <svg viewBox="0 0 24 24"><path d="M11.41 12.59L8.95 10.14l3.46-3.46-1.42-1.42L5.7 10.14l4.29 4.29 1.42-1.42zm5.9 0l-1.42 1.42 3.46 3.46-3.46 3.46 1.42 1.42 4.29-4.29-4.29-4.29z"/></svg>
+                </button>
+                <button class="btn" onclick="insertMarkdown('[', '](url)')" title="链接">
+                    <svg viewBox="0 0 24 24"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>
+                </button>
+                <button class="btn" onclick="insertMarkdown('![', '](image-url)')" title="图片">
+                    <svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+                </button>
+                <button class="btn" onclick="insertMarkdown('---\n', '')" title="分割线">
+                    <svg viewBox="0 0 24 24"><path d="M19 13H5v-2h14v2z"/></svg>
+                </button>
+            </div>
+            <div class="toolbar-group">
+                <button class="btn btn-primary" id="toggleBtn" onclick="toggleView()" title="切换预览">
+                    <svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- 主内容区 -->
+        <div class="main-content" id="mainContent">
+            <div class="editor-container" id="editorContainer">
+                <textarea class="editor" id="editor" placeholder="开始编写 Markdown..." spellcheck="false"></textarea>
+            </div>
+            <div class="preview-container" id="previewContainer">
+                <div class="preview" id="preview"></div>
+            </div>
+        </div>
+
+        <!-- 底部状态栏 -->
+        <div class="statusbar">
+            <div class="statusbar-left">
+                <span id="charCount">0 字</span>
+                <span id="lineCount">0 行</span>
+                <span id="filenameDisplay">未命名</span>
+            </div>
+            <div class="statusbar-right">
+                <span id="cursorPos">行 1, 列 1</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 文件操作按钮（底部固定） -->
+    <div style="position: fixed; bottom: 50px; right: 16px; display: flex; flex-direction: column; gap: 10px; z-index: 100;">
+        <button class="btn btn-primary" onclick="newFile()" title="新建" style="width: 50px; height: 50px; border-radius: 50%; box-shadow: 0 4px 15px rgba(233, 69, 96, 0.4);">
+            <svg viewBox="0 0 24 24" style="width: 24px; height: 24px;"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+        </button>
+        <button class="btn" onclick="openFile()" title="打开" style="width: 50px; height: 50px; border-radius: 50%; background: var(--bg-secondary); box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+            <svg viewBox="0 0 24 24" style="width: 24px; height: 24px;"><path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg>
+        </button>
+        <button class="btn" onclick="saveFile()" title="保存 (Ctrl+S)" style="width: 50px; height: 50px; border-radius: 50%; background: var(--bg-secondary); box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+            <svg viewBox="0 0 24 24" style="width: 24px; height: 24px;"><path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>
+        </button>
+        <button class="btn" onclick="saveAsFile()" title="另存为" style="width: 50px; height: 50px; border-radius: 50%; background: var(--bg-secondary); box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+            <svg viewBox="0 0 24 24" style="width: 24px; height: 24px;"><path d="M19 12v7H5v-7H3v7c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2zm-6 .67l2.59-2.58L17 11.5l-5 5-5-5 1.41-1.41L11 12.67V3h2v9.67z"/></svg>
+        </button>
+    </div>
+
+    <!-- 文件输入（传统方式 fallback） -->
+    <input type="file" id="fileInput" accept=".md,.markdown,.txt" onchange="handleFileSelect(event)">
+
+    <!-- Toast 提示 -->
+    <div class="toast" id="toast"></div>
+
+    <!-- 加载外部库 -->
+    <script src="md-editor-assets/markdown-it.min.js"></script>
+    <script src="md-editor-assets/highlight.min.js"></script>
+
+    <script>
+        // HTML 转义
+        function escapeHtml(str) {
+            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        // 初始化 markdown-it
+        const md = window.markdownit({
+            html: false,
+            xhtmlOut: false,
+            breaks: true,
+            langPrefix: 'language-',
+            linkify: true,
+            typographer: true,
+            highlight: function (str, lang) {
+                if (typeof hljs !== 'undefined') {
+                    if (lang && hljs.getLanguage(lang)) {
+                        try {
+                            return hljs.highlight(str, { language: lang }).value;
+                        } catch (__) {}
+                    }
+                    try {
+                        return hljs.highlightAuto(str).value;
+                    } catch (__) {}
+                }
+                return escapeHtml(str);
+            }
+        });
+
+        // 扩展 markdown-it 支持任务列表
+        md.use(function(md) {
+            md.core.ruler.after('inline', 'task_list', function(state) {
+                const tokens = state.tokens;
+                for (let i = 0; i < tokens.length; i++) {
+                    if (tokens[i].type === 'inline' && tokens[i].content) {
+                        const content = tokens[i].content;
+                        if (/^\[([ xX])\]/.test(content)) {
+                            const checked = content.charAt(1) !== ' ';
+                            const checkbox = '<input type="checkbox" ' + (checked ? 'checked ' : '') + 'disabled>';
+                            tokens[i].content = content.replace(/^\[([ xX])\]/, checkbox);
+                            tokens[i].attrSet('class', 'task-list-item');
+                        }
+                    }
+                }
+            });
+        });
+
+        // DOM 元素
+        const editor = document.getElementById('editor');
+        const preview = document.getElementById('preview');
+        const previewContainer = document.getElementById('previewContainer');
+        const editorContainer = document.getElementById('editorContainer');
+        const mainContent = document.getElementById('mainContent');
+        const charCount = document.getElementById('charCount');
+        const lineCount = document.getElementById('lineCount');
+        const cursorPos = document.getElementById('cursorPos');
+        const filenameDisplay = document.getElementById('filenameDisplay');
+        const toggleBtn = document.getElementById('toggleBtn');
+        const undoBtn = document.getElementById('undoBtn');
+        const redoBtn = document.getElementById('redoBtn');
+
+        // 状态
+        let isPreviewMode = false;
+        let fileHandle = null;
+        let currentFilename = 'untitled.md';
+
+        // 撤销/恢复历史
+        let history = [];
+        let historyIndex = -1;
+        const maxHistory = 100;
+        let isUndoRedo = false;
+        let lastSaveTime = 0;
+
+        // 初始示例内容
+        const defaultContent = `# 欢迎使用 MD Editor
+
+这是一个简洁的 **Markdown 编辑器**，专为手机端优化。
+
+## 功能特点
+
+-  纯前端实现，无需后端
+-  深色主题，护眼舒适
+-  实时预览，所见即所得
+-  支持多种 Markdown 语法
+-  撤销/恢复功能 (Ctrl+Z/Ctrl+Y)
+-  文件系统 API 支持
+
+## 语法示例
+
+### 1. 文字样式
+
+- **粗体文字**：\`**文字**\`
+- *斜体文字*：\`*文字*\`
+- ~~删除线~~：\`~~文字~~\`
+
+### 2. 代码
+
+行内代码：\`console.log('Hello')\`
+
+代码块：
+
+\`\`\`javascript
+function greet(name) {
+    console.log(\`Hello, \${name}!\`);
+    return true;
+}
+
+greet('World');
+\`\`\`
+
+### 3. 列表
+
+无序列表：
+- 第一项
+- 第二项
+- 第三项
+
+有序列表：
+1. 第一步
+2. 第二步
+3. 第三步
+
+### 4. 表格
+
+| 名称 | 类型 | 说明 |
+|------|------|------|
+| name | string | 用户名 |
+| age  | number | 年龄   |
+| email| string | 邮箱   |
+
+### 5. 引用
+
+> "代码是写给人看的，只是顺便让机器执行。"
+> —— Donald Knuth
+
+### 6. 链接和图片
+
+[访问 GitHub](https://github.com)
+
+---
+
+开始编辑你的 Markdown 文档吧！
+`;
+
+        // 初始化
+        function init() {
+            editor.value = defaultContent;
+            currentFilename = 'untitled.md';
+            updateFilenameDisplay();
+            updateStats();
+            updatePreview();
+            checkOrientation();
+
+            // 初始化历史记录
+            saveState();
+
+            // 监听编辑器事件
+            editor.addEventListener('input', onEditorInput);
+            editor.addEventListener('keydown', onEditorKeydown);
+            editor.addEventListener('click', updateCursorPos);
+            editor.addEventListener('keyup', updateCursorPos);
+
+            // 监听屏幕方向变化
+            window.addEventListener('orientationchange', checkOrientation);
+            window.addEventListener('resize', checkOrientation);
+
+            // 键盘快捷键 (Ctrl+S 保存)
+            document.addEventListener('keydown', function(e) {
+                if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                    e.preventDefault();
+                    saveFile();
+                }
+            });
+        }
+
+        // 保存当前状态到历史栈
+        function saveState() {
+            if (isUndoRedo) return;
+
+            const now = Date.now();
+            const state = {
+                content: editor.value,
+                cursorStart: editor.selectionStart,
+                cursorEnd: editor.selectionEnd,
+                timestamp: now
+            };
+
+            // 如果与上次状态相同，不保存
+            if (historyIndex >= 0 && history[historyIndex].content === state.content) {
+                return;
+            }
+
+            // 删除当前位置之后的历史（当撤销后做新操作时）
+            if (historyIndex < history.length - 1) {
+                history = history.slice(0, historyIndex + 1);
+            }
+
+            // 添加新状态
+            history.push(state);
+            historyIndex++;
+
+            // 限制历史记录数量
+            if (history.length > maxHistory) {
+                history.shift();
+                historyIndex--;
+            }
+
+            lastSaveTime = now;
+            updateUndoRedoButtons();
+        }
+
+        // 撤销
+        function undo() {
+            if (!canUndo()) return;
+
+            isUndoRedo = true;
+            historyIndex--;
+            const state = history[historyIndex];
+
+            editor.value = state.content;
+            editor.setSelectionRange(state.cursorStart, state.cursorEnd);
+            editor.focus();
+
+            updateStats();
+            updatePreview();
+            updateUndoRedoButtons();
+            updateCursorPos();
+
+            isUndoRedo = false;
+        }
+
+        // 恢复
+        function redo() {
+            if (!canRedo()) return;
+
+            isUndoRedo = true;
+            historyIndex++;
+            const state = history[historyIndex];
+
+            editor.value = state.content;
+            editor.setSelectionRange(state.cursorStart, state.cursorEnd);
+            editor.focus();
+
+            updateStats();
+            updatePreview();
+            updateUndoRedoButtons();
+            updateCursorPos();
+
+            isUndoRedo = false;
+        }
+
+        // 检查是否可以撤销
+        function canUndo() {
+            return historyIndex > 0;
+        }
+
+        // 检查是否可以恢复
+        function canRedo() {
+            return historyIndex < history.length - 1;
+        }
+
+        // 更新撤销/恢复按钮状态
+        function updateUndoRedoButtons() {
+            undoBtn.disabled = !canUndo();
+            redoBtn.disabled = !canRedo();
+        }
+
+        // 编辑器输入事件
+        function onEditorInput() {
+            updateStats();
+            updatePreview();
+
+            // 延迟保存状态（避免每次输入都保存）
+            clearTimeout(window.saveStateTimer);
+            window.saveStateTimer = setTimeout(() => {
+                saveState();
+            }, 300);
+        }
+
+        // 编辑器键盘事件
+        function onEditorKeydown(e) {
+            // Tab 键插入空格
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                insertAtCursor('    ');
+                return;
+            }
+
+            // Ctrl+Z 撤销
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+                e.preventDefault();
+                undo();
+                return;
+            }
+
+            // Ctrl+Y 或 Ctrl+Shift+Z 恢复
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+                e.preventDefault();
+                redo();
+                return;
+            }
+
+            updateCursorPos();
+        }
+
+        // 插入 Markdown 语法
+        function insertMarkdown(before, after) {
+            const start = editor.selectionStart;
+            const end = editor.selectionEnd;
+            const selectedText = editor.value.substring(start, end);
+
+            const newText = before + selectedText + after;
+            editor.value = editor.value.substring(0, start) + newText + editor.value.substring(end);
+
+            // 设置光标位置
+            const newCursorPos = selectedText ? start + newText.length : start + before.length;
+            editor.setSelectionRange(newCursorPos, newCursorPos);
+            editor.focus();
+
+            onEditorInput();
+            saveState();
+        }
+
+        // 在光标位置插入文本
+        function insertAtCursor(text) {
+            const start = editor.selectionStart;
+            const end = editor.selectionEnd;
+            editor.value = editor.value.substring(0, start) + text + editor.value.substring(end);
+            editor.setSelectionRange(start + text.length, start + text.length);
+            editor.focus();
+            onEditorInput();
+            saveState();
+        }
+
+        // 更新统计信息
+        function updateStats() {
+            const text = editor.value;
+            const chars = text.length;
+            const lines = text.split('\n').length;
+
+            charCount.textContent = `${chars} 字`;
+            lineCount.textContent = `${lines} 行`;
+        }
+
+        // 更新光标位置
+        function updateCursorPos() {
+            const text = editor.value.substring(0, editor.selectionStart);
+            const lines = text.split('\n');
+            const currentLine = lines.length;
+            const currentCol = lines[lines.length - 1].length + 1;
+            cursorPos.textContent = `行 ${currentLine}, 列 ${currentCol}`;
+        }
+
+        // 更新预览
+        function updatePreview() {
+            const html = md.render(editor.value);
+            preview.innerHTML = html;
+        }
+
+        // 切换编辑/预览模式
+        function toggleView() {
+            isPreviewMode = !isPreviewMode;
+
+            if (isPreviewMode) {
+                editorContainer.classList.add('hidden');
+                previewContainer.classList.add('active');
+                toggleBtn.classList.add('active');
+            } else {
+                editorContainer.classList.remove('hidden');
+                previewContainer.classList.remove('active');
+                toggleBtn.classList.remove('active');
+                editor.focus();
+            }
+        }
+
+        // 检查屏幕方向（横屏时分屏）
+        function checkOrientation() {
+            if (window.innerWidth > window.innerHeight && window.innerWidth >= 768) {
+                // 横屏且宽度足够，开启分屏
+                mainContent.classList.add('split-mode');
+                editorContainer.classList.remove('hidden');
+                previewContainer.classList.add('active');
+            } else {
+                // 竖屏或宽度不足，关闭分屏
+                mainContent.classList.remove('split-mode');
+                if (isPreviewMode) {
+                    editorContainer.classList.add('hidden');
+                    previewContainer.classList.add('active');
+                } else {
+                    editorContainer.classList.remove('hidden');
+                    previewContainer.classList.remove('active');
+                }
+            }
+        }
+
+        // 更新文件名显示
+        function updateFilenameDisplay() {
+            filenameDisplay.textContent = currentFilename;
+        }
+
+        // 新建文件
+        function newFile() {
+            if (editor.value.trim() && !confirm('确定要新建文件吗？当前内容将丢失。')) {
+                return;
+            }
+            editor.value = '';
+            currentFilename = 'untitled.md';
+            fileHandle = null;
+            updateFilenameDisplay();
+            updateStats();
+            updatePreview();
+            history = [];
+            historyIndex = -1;
+            saveState();
+            showToast('新建文件成功');
+            if (isPreviewMode) {
+                toggleView();
+            }
+        }
+
+        // 打开文件
+        async function openFile() {
+            // 检测是否支持 File System Access API
+            if (window.showOpenFilePicker) {
+                await openFileWithPicker();
+            } else {
+                // 降级到传统方式
+                document.getElementById('fileInput').click();
+            }
+        }
+
+        // 使用 File System Access API 打开文件
+        async function openFileWithPicker() {
+            try {
+                const [handle] = await window.showOpenFilePicker({
+                    types: [{
+                        description: 'Markdown 文件',
+                        accept: {
+                            'text/markdown': ['.md', '.markdown'],
+                            'text/plain': ['.txt']
+                        }
+                    }],
+                    multiple: false
+                });
+
+                await handleFileSelectPicker(handle);
+            } catch (err) {
+                // 用户取消选择
+                if (err.name !== 'AbortError') {
+                    console.error('打开文件失败:', err);
+                    showToast('打开文件失败');
+                }
+            }
+        }
+
+        // 处理 File System Access API 选择的文件
+        async function handleFileSelectPicker(handle) {
+            try {
+                const file = await handle.getFile();
+                const content = await file.text();
+
+                editor.value = content;
+                currentFilename = file.name;
+                fileHandle = handle;
+
+                updateFilenameDisplay();
+                updateStats();
+                updatePreview();
+
+                // 重置历史记录
+                history = [];
+                historyIndex = -1;
+                saveState();
+
+                showToast(`已打开: ${file.name}`);
+            } catch (err) {
+                console.error('读取文件失败:', err);
+                showToast('读取文件失败');
+            }
+        }
+
+        // 传统方式处理文件选择
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                editor.value = e.target.result;
+                currentFilename = file.name;
+                fileHandle = null; // 传统方式无法获取句柄
+
+                updateFilenameDisplay();
+                updateStats();
+                updatePreview();
+
+                // 重置历史记录
+                history = [];
+                historyIndex = -1;
+                saveState();
+
+                showToast(`已打开: ${file.name}`);
+            };
+            reader.readAsText(file);
+            e.target.value = '';
+        }
+
+        // 保存文件
+        async function saveFile() {
+            if (fileHandle) {
+                // 有文件句柄，直接覆盖保存
+                await saveWithHandle(fileHandle);
+            } else {
+                // 没有句柄，降级为另存为
+                await saveAsFile();
+            }
+        }
+
+        // 另存为文件
+        async function saveAsFile() {
+            if (window.showSaveFilePicker) {
+                try {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: currentFilename,
+                        types: [{
+                            description: 'Markdown 文件',
+                            accept: {
+                                'text/markdown': ['.md', '.markdown'],
+                                'text/plain': ['.txt']
+                            }
+                        }]
+                    });
+
+                    await saveWithHandle(handle);
+                    fileHandle = handle;
+                    currentFilename = handle.name || currentFilename;
+                    updateFilenameDisplay();
+                    showToast('文件已保存');
+                } catch (err) {
+                    if (err.name !== 'AbortError') {
+                        console.error('保存文件失败:', err);
+                        showToast('保存文件失败');
+                    }
+                }
+            } else {
+                // 降级方案：使用 Blob 下载
+                saveAsFallback();
+            }
+        }
+
+        // 使用文件句柄保存
+        async function saveWithHandle(handle) {
+            try {
+                const writable = await handle.createWritable();
+                await writable.write(editor.value);
+                await writable.close();
+                showToast('文件已保存');
+            } catch (err) {
+                console.error('写入文件失败:', err);
+                showToast('保存失败');
+                throw err;
+            }
+        }
+
+        // 降级保存方案（使用 Blob 下载）
+        function saveAsFallback() {
+            let filename = currentFilename;
+            if (!filename.endsWith('.md') && !filename.endsWith('.markdown') && !filename.endsWith('.txt')) {
+                filename += '.md';
+            }
+
+            const blob = new Blob([editor.value], { type: 'text/markdown;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            showToast('文件已下载');
+        }
+
+        // 显示 Toast
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        // 启动
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
